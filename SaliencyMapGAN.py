@@ -11,6 +11,7 @@ import os
 import cv2 as cv
 from torch.autograd import Variable
 from data_loader import DataLoader
+from utils import predict
 
 #############################################################################
 # 顕著性マップの生成アルゴリズム SalGAN の実験用プログラム
@@ -316,6 +317,7 @@ if __name__ == "__main__":
     # ディレクトリがなければ作成
     if not os.path.exists(DIR_TO_OUTPUT):
         os.makedirs(DIR_TO_OUTPUT)
+    validation_sample = cv.imread("sample.png")
 
     #####################################
     # 学習                    
@@ -368,6 +370,7 @@ if __name__ == "__main__":
                     "d_loss": d_loss.data[0],
                     "real_score_mean": real_score
                 }
+                # ログを残す
                 for tag, value in info.items():
                     logger.scalar_summary(tag, value, counter)
             
@@ -390,6 +393,50 @@ if __name__ == "__main__":
                 g_adversarial_loss = - torch.log(outputs)
                 # Generatorの損失はマップ同士の画像特徴的損失とdiscriminatorとの敵対的損失の重み付き和
                 g_loss = torch.sum(g_content_loss + alpha * g_adversarial_loss)
+                # コストを保存
+                g_cost_avg += g_loss.data[0]
+                # 勾配を計算
+                g_loss.backward()
+                # パラメータの更新
+                g_optim.step()
+                # 学習状況の保存
+                info = {
+                    "g_loss": g_loss.data[0],
+                    "fake_score_mean": fake_score,
+                }
+                # ログを残す
+                for tag, value in info.items():
+                    logger.scalar_summary(tag, value, counter)
+            
+            # 学習先の切り替え
+            n_updates += 1
+
+            # 学習状況の報告
+            if (i + 1) % 100 == 0:
+                print("Epoch [%d/%d], Step [%d/%d], d_loss: %.4f, D(x): %2.f, D(G(x)): %.2f, time: %4.4f" %(epoch, num_epoch, i + 1, num_batch, d_loss.data[0], real_score, fake_score, time.time() - start_time))
+            
+            # カウントアップ
+            counter += 1
+        
+        # バッチ内平均コストを計算
+        d_cost_avg /= num_batch
+        g_cost_avg /= num_batch
+
+        # 3回に一回モデルの重みを保存する
+        if (epoch + 1) % 3 == 0:
+            print("Epoch: ", epoch, "train_loss-> ", (d_cost_avg, g_cost_avg))
+            torch.save(generator.state_dict(), "./generator.pkl")
+            torch.save(discriminator.state_dict(), "./discriminator.pkl")
+
+        # サンプルで顕著性マップを生成してみる
+        predict(generator, validation_sample, epoch, DIR_TO_OUTPUT)
+    
+    # モデルの重みの保存
+    torch.save(generator.state_dict(), "./generator.pkl")
+    torch.save(discriminator.state_dict(), "./discriminator.pkl")
+
+    print("Finished trainning")
+    
 
 
 
