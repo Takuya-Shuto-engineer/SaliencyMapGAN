@@ -12,6 +12,7 @@ import cv2 as cv
 from torch.autograd import Variable
 from data_loader import DataLoader
 from utils import predict
+from constants import *
 
 #############################################################################
 # 顕著性マップの生成アルゴリズム SalGAN の実験用プログラム
@@ -32,11 +33,10 @@ from utils import predict
 #############################################################################
 
 
-
-# 画像の縦の長さ
-image_width = 1360
 # 画像の横の長さ
-image_height = 768
+image_height = INPUT_SIZE[0]
+# 画像の縦の長さ
+image_width = INPUT_SIZE[1]
 # バッチサイズ
 batch_size = 32
 # Generatorの最初のConvolutionの出力の次元数
@@ -236,8 +236,8 @@ class Discriminator(nn.Module):
         ]
         fcModules = [
             # fc4 (テンソルの縦横の長さは一回のプーリングで1/2になるので，
-            # 現在のテンソルの大きさはプーリング三回で image_width / 2^3  *  image_height / 2^3)
-            nn.Linear(ndf * (image_width / 8) * (image_height / 8), 100),
+            # 現在のテンソルの大きさはプーリング三回で image_height / 2^3  *  image_width / 2^3)
+            nn.Linear(ndf * (image_height / 8) * (image_width / 8), 100),
             nn.Tanh(),
             # fc5
             nn.Linear(100, 2),
@@ -251,7 +251,7 @@ class Discriminator(nn.Module):
     
     def forward(self, input):
         X = self.convLayers(input) # 畳み込み層
-        X = X.view(-1, self.num_flat_features(X)) # [batch_size, ndf * (imagewidth / 2^3) * (image_height / 2^3)]の二次元テンソルへ変換
+        X = X.view(-1, self.num_flat_features(X)) # [batch_size, ndf * (image_height / 2^3) * (image_width / 2^3)]の二次元テンソルへ変換
         X = self.fcModules(X) # 全結合層
         return X
 
@@ -335,8 +335,8 @@ if __name__ == "__main__":
             # バッチ内のオリジナル画像と顕著性マップを取得
             (batch_img, batch_map) = dataloader.get_batch()
             # それぞれ計算グラフの情報を保持させる機能を追加（Variableでラッピング）
-            batch_img = to_variable(batch_img, require_grad = False) # [batch_size, 3, image_width, image_height]
-            batch_map = to_variable(batch_map, require_grad = False) # [batch_size, 1, image_width, image_height]
+            batch_img = to_variable(batch_img, require_grad = False) # [batch_size, 3, image_height, image_width]
+            batch_map = to_variable(batch_map, require_grad = False) # [batch_size, 1, image_height, image_width]
             # バッチサイズの長さの本物・偽物ラベルを用意する（BCE損失計算用）
             real_labels = to_variable(torch.Tensor(np.ones(batch_size, dtype = float)), require_grad = False)
             fake_labels = to_variable(torch.Tensor(np.zeros(batch_size, dtype = float)), require_grad = False)
@@ -348,7 +348,7 @@ if __name__ == "__main__":
                 d_optim.zero_grad()
                 # Discriminatorに正解のセットを"1"と判別させるように入力を定義する
                 # Discriminatorへの入力はオリジナル画像と顕著性マップを結合させた4次元テンソル
-                input_d = torch.cat((batch_img, batch_map), 1) # [batch_size, 3 + 1, image_width, image_height]に変換
+                input_d = torch.cat((batch_img, batch_map), 1) # [batch_size, 3 + 1, image_height, image_width]に変換
                 # Discriminatorに正解データを入力し，出力を得る
                 outputs = discriminator(input_d).squeeze() # Discriminatorの出力は[batch_size, 1]の2次元配列で出てくるので，1次元配列にする
                 # 正解データに対するBCE損失を計算
@@ -382,7 +382,7 @@ if __name__ == "__main__":
                 # 偽の顕著性マップを生成
                 fake_map = generator(batch_img)
                 # Discriminatorへの入力はオリジナル画像と顕著性マップを結合させた4次元テンソル
-                input_d = torch.cat((batch_img, fake_map), 1) # [batch_size, 3 + 1, image_width, image_height]に変換
+                input_d = torch.cat((batch_img, fake_map), 1) # [batch_size, 3 + 1, image_height, image_width]に変換
                 # Discriminatorに判別させる
                 outputs = discriminator(input_d).squeeze() # Discriminatorの出力は[batch_size, 1]の2次元配列で出てくるので，1次元配列にする
                 # 偽データに対する出力の平均値（スコア）を計算する
