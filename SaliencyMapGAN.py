@@ -3,7 +3,7 @@ from torch import nn, optim
 from torchvision.utils import save_image
 from torchvision import transforms, datasets
 import numpy as np
-from tqgm import tqdm
+from tqdm import tqdm
 from statistics import mean
 from logger import Logger
 import time
